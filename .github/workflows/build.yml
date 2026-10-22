@@ -1,0 +1,50 @@
+# Builds PDFCapture.exe on a GitHub-hosted Windows machine.
+# Nothing needs to be installed on your own laptop.
+#
+#   Build on demand:  Actions tab > "Build PDFCapture.exe" > Run workflow
+#                     -> download "PDFCapture-exe" from the finished run
+#   Publish a link:   Releases > Draft a new release > tag v1.0 > Publish
+#                     -> PDFCapture.exe is attached to the release automatically
+
+name: Build PDFCapture.exe
+
+on:
+  workflow_dispatch:
+  release:
+    types: [published]
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - name: Get the code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install build tools
+        run: python -m pip install --upgrade pip pyinstaller pillow numpy
+
+      - name: Check the script is valid
+        run: python -c "import ast; ast.parse(open('PDFCapture.pyw').read()); print('script OK')"
+
+      - name: Build the exe
+        run: pyinstaller --onefile --noconsole --name PDFCapture PDFCapture.pyw
+
+      - name: Upload the exe
+        uses: actions/upload-artifact@v4
+        with:
+          name: PDFCapture-exe
+          path: dist/PDFCapture.exe
+
+      - name: Attach to release
+        if: github.event_name == 'release'
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/PDFCapture.exe
