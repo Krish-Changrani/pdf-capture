@@ -1,12 +1,15 @@
-# Builds PDFCapture.exe on a GitHub-hosted Windows machine.
+# Builds PDF Capture on a GitHub-hosted Windows machine, as a FOLDER (not a single exe),
+# so it starts fast and never unpacks itself to a temp folder.
 # Nothing needs to be installed on your own laptop.
 #
-#   Build on demand:  Actions tab > "Build PDFCapture.exe" > Run workflow
-#                     -> download "PDFCapture-exe" from the finished run
-#   Publish a link:   Releases > Draft a new release > tag v1.0 > Publish
-#                     -> PDFCapture.exe is attached to the release automatically
+#   Actions tab > "Build PDF Capture" > Run workflow
+#     -> builds the app AND creates a new release (v1.1, v1.2, ...) with PDFCapture.zip attached.
+#   Sharing link that always points at the newest version:
+#     https://github.com/<your-username>/<repo-name>/releases/latest/download/PDFCapture.zip
+#
+#   (Publishing a release by hand also still works: the zip is attached once the run finishes.)
 
-name: Build PDFCapture.exe
+name: Build PDF Capture
 
 on:
   workflow_dispatch:
@@ -34,17 +37,35 @@ jobs:
       - name: Check the script is valid
         run: python -c "import ast; ast.parse(open('PDFCapture.pyw').read()); print('script OK')"
 
-      - name: Build the exe
-        run: pyinstaller --onefile --noconsole --name PDFCapture PDFCapture.pyw
+      - name: Build the app folder
+        run: pyinstaller --onedir --noconsole --name PDFCapture PDFCapture.pyw
 
-      - name: Upload the exe
+      - name: Check the build and zip it
+        shell: pwsh
+        run: |
+          if (!(Test-Path dist/PDFCapture/PDFCapture.exe)) { Write-Error "PDFCapture.exe was not created"; exit 1 }
+          if (!(Test-Path dist/PDFCapture/_internal)) { Write-Error "_internal folder was not created"; exit 1 }
+          Compress-Archive -Path dist/PDFCapture/* -DestinationPath PDFCapture.zip   # contents only, so Extract All gives one PDFCapture folder
+          "Built PDFCapture.zip: {0:N1} MB" -f ((Get-Item PDFCapture.zip).Length / 1MB)
+
+      - name: Save the zip on this run's page
         uses: actions/upload-artifact@v4
         with:
-          name: PDFCapture-exe
-          path: dist/PDFCapture.exe
+          name: PDFCapture-zip
+          path: PDFCapture.zip
 
-      - name: Attach to release
+      - name: Create a release with the zip attached (Run workflow button)
+        if: github.event_name == 'workflow_dispatch'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v1.${{ github.run_number }}
+          name: PDF Capture v1.${{ github.run_number }}
+          target_commitish: ${{ github.sha }}
+          make_latest: true
+          files: PDFCapture.zip
+
+      - name: Attach the zip to a release you published by hand
         if: github.event_name == 'release'
         uses: softprops/action-gh-release@v2
         with:
-          files: dist/PDFCapture.exe
+          files: PDFCapture.zip
